@@ -8,6 +8,7 @@ __license__ = "MIT"
 __version__ = "0.2"
 
 
+
 def user_input_loop(alexa_device):
     """ This thread initializes a voice recognition event based on user input. This function uses command line
         input for interacting with the user. The user can start a recording, or quit if desired.
@@ -22,7 +23,6 @@ def user_input_loop(alexa_device):
     # main loop
     detector.start(detected_callback=alexa_device.user_initiate_audio,
                    sleep_time=0.03)
-    
     detector.terminate()
 
 

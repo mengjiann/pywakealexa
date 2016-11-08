@@ -2,8 +2,8 @@ response.mp3
 response.wav
 files/response.mp3
 files/response.wav
-.idea/*
 __pycache__/*
+snowboy/__pycache__/*
 config.dict
 ffmpeg
 main_developer.py

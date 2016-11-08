@@ -10,17 +10,16 @@ __version__ = "0.2"
 
 
 def user_input_loop(alexa_device):
-    """ This thread initializes a voice recognition event based on user input. This function uses command line
-        input for interacting with the user. The user can start a recording, or quit if desired.
+    """ This thread initializes a voice recognition event based on Snowboy's Alexa wake word universal model. This function uses voice recognition for interacting with the user. The user can initiate a command by saying Alexa, or quit if desired.
 
         This is currently the "main" thread for the device.
     """
-    # While the stop event is not set
+
     model = 'files/alexa.umdl'
-    detector = snowboydecoder.HotwordDetector(model, sensitivity=0.5)
+    detector = snowboydecoder.HotwordDetector(model, sensitivity=0.45)
     print('Listening... Press Ctrl+C to exit')
     
-    # main loop
+    # main Snowboy detector loop
     detector.start(detected_callback=alexa_device.user_initiate_audio,
                    sleep_time=0.03)
     detector.terminate()

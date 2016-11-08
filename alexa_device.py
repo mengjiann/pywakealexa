@@ -292,17 +292,12 @@ class AlexaDevice:
 
         # Get the name from the header
         name = header['name']
-
-        # Process the SpeechSynthesizer.Speak directive
         if name == 'Play':
-            # Get token for current TTS object
             audio_response = attachment
-
-            # Play the mp3 file
+            # Play audio feedback for AudioPlayer
             self.alexa_audio_instance.play_mp3(audio_response)
-
-            # Set SpeechSynthesizer context state to "finished"
-            # TODO capture state so that it can be used in context
+            # TODO verify this is configured correctly
+            # even though it plays the audio
         # Throw an error if the name is not recognized.
         # This indicates new a case needs to be added
         else:

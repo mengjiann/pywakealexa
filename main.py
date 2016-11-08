@@ -15,15 +15,14 @@ def user_input_loop(alexa_device):
         This is currently the "main" thread for the device.
     """
     # While the stop event is not set
-    while True:
-        model = 'files/alexa.umdl'
-        detector = snowboydecoder.HotwordDetector(model, sensitivity=0.5)
-        print('Listening... Press Ctrl+C to exit')
-        
-        # main loop
-        detector.start(detected_callback=alexa_device.user_initiate_audio,
-                       sleep_time=0.03)
-        
+    model = 'files/alexa.umdl'
+    detector = snowboydecoder.HotwordDetector(model, sensitivity=0.5)
+    print('Listening... Press Ctrl+C to exit')
+    
+    # main loop
+    detector.start(detected_callback=alexa_device.user_initiate_audio,
+                   sleep_time=0.03)
+    
     detector.terminate()
 
 

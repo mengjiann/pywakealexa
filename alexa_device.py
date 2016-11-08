@@ -237,7 +237,8 @@ class AlexaDevice:
                 "muted": False
             }
         }
-        return [context_audio, context_alerts, context_speaker]
+        # context_audio
+        return [context_alerts, context_speaker]
 
     def process_response(self, message):
         """ Called when a message is received from Alexa (either on the downchannel or as a response). This
@@ -253,17 +254,16 @@ class AlexaDevice:
             raise KeyError("Content is not available.")
         # If there are more than one attachments, throw error (code currently can't handle this.
         # Not sure if this is even possible based on the AVS API.
-        if len(message['attachment']) > 1:
-            raise IndexError("Too many attachments (%d)" % len(message['attachment']))
+        #if len(message['attachment']) > 1:
+        #    raise IndexError("Too many attachments (%d)" % len(message['attachment']))
 
-        if message['attachment']:
-            attachment = message['attachment'][0]
-        else:
+        if not message['attachment']:
             attachment = None
-
+            
         # print("%d messages received" % len(message['content']))
         # Loop through all content received
-        for content in message['content']:
+        for i, attachment in enumerate(message['attachment']):
+            content = message['content'][i]
             header = content['directive']['header']
 
             # Get the namespace from the header and call the correct process directive function
@@ -274,10 +274,39 @@ class AlexaDevice:
                 self.process_directive_speech_recognizer(content, attachment)
             elif namespace == 'Alerts':
                 self.process_directive_alerts(content, attachment)
+            elif namespace == 'AudioPlayer':
+                self.process_directive_audio_player(content, attachment)
             # Throw an error in case the namespace is not recognized.
             # This indicates new a process directive function needs to be added
             else:
                 raise NameError("Namespace not recognized (%s)." % namespace)
+
+    def process_directive_audio_player(self, content, attachment):
+        """ Process a directive that belongs to the SpeechSynthesizer namespace.
+
+        :param content: content dictionary (contains header and payload)
+        :param attachment: attachment included with the content
+        """
+        header = content['directive']['header']
+        payload = content['directive']['payload']
+
+        # Get the name from the header
+        name = header['name']
+
+        # Process the SpeechSynthesizer.Speak directive
+        if name == 'Play':
+            # Get token for current TTS object
+            audio_response = attachment
+
+            # Play the mp3 file
+            self.alexa_audio_instance.play_mp3(audio_response)
+
+            # Set SpeechSynthesizer context state to "finished"
+            # TODO capture state so that it can be used in context
+        # Throw an error if the name is not recognized.
+        # This indicates new a case needs to be added
+        else:
+            raise NameError("Name not recognized (%s)." % name)
 
     def process_directive_speech_synthesizer(self, content, attachment):
         """ Process a directive that belongs to the SpeechSynthesizer namespace.

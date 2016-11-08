@@ -404,7 +404,7 @@ class AlexaConnection:
         # Add message ID to header
         header['messageId'] = self.get_unique_message_id()
         body_dict = {
-            #"context": self.context_handle(),
+            "context": self.context_handle(),
             "event": {
                 "header": header,
                 "payload": payload

@@ -1,3 +1,7 @@
+# Disclaimer
+
+This is a modified version of Python Alexa Voice Service with Snowboy's voice recognition capabilities to register a wake up command for Alexa. This allows you to truly have hands free capabilities with Amazon's Alexa Voice Service without the need to press any buttons.
+
 # Python Alexa Voice Service
 
 This project is a Python implementation of Amazon's Alexa Voice Service (AVS). The goal of this project is to create cross-platform example Alexa device that is completely compatible with the current AVS API (v20160207). This is a work in progress.

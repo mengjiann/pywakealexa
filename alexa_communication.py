@@ -217,7 +217,7 @@ class AlexaConnection:
         downstream_response = self.get_response(self.downstream_id)
         if downstream_response.status != 200:
             print(downstream_response.read())
-            raise NameError("Bad status (%s)" % downstream_response.status)
+            #raise NameError("Bad status (%s)" % downstream_response.status)
         self.downstream_boundary = get_boundary_from_response(downstream_response)
         if lock:
             self.lock.release()
@@ -244,7 +244,7 @@ class AlexaConnection:
                     # TODO somehow message ends up being empty
                     self.process_response_handle(message)
             # Check for new data every 0.5 seconds
-            time.sleep(0.5)
+            time.sleep(0.1)
 
     def ping_thread(self):
         """ This functions runs as a thread, and will send a ping request every 4 minutes. This ping

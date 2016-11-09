@@ -439,6 +439,14 @@ class AlexaConnection:
         result = self.connection.get_response(stream_id)
         self.lock.release()
         return result
+        
+    def get_audio_list(self, url):
+        request = requests.get(url)
+        if request.status_code == 200:
+            response = request.text
+            audio_list = response.split('\n')
+            if len(audio_list) > 0:
+                return audio_list[0]
 
     def start_recognize_event(self, raw_audio, dialog_request_id=None):
         """ Starts a SpeechRecognizer.Recognize event. Requires a raw_audio argument. The optional dialog_request_id

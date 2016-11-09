@@ -81,6 +81,20 @@ class AlexaAudio:
         # Play a wave file directly
         #self.play_wav('files/response.wav')
 
+    def play_stream(self, url):
+        """ Play an MP3 file. Alexa uses the MP3 format for all audio responses. PyAudio does not support this, so
+            the MP3 file must first be converted to a wave file before playing.
+
+            This function assumes ffmpeg is located in the current working directory (ffmpeg/bin/ffmpeg).
+
+        :param raw_audio: the raw audio as a binary string
+        """
+
+        subprocess.call(['mpc', 'add', url],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.call(['mpc', 'play'],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)                
+
     def play_wav(self, file, timeout=None, stop_event=None, repeat=False):
         """ Play a wave file using PyAudio. The file must be specified as a path.
 

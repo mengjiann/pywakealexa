@@ -294,9 +294,13 @@ class AlexaDevice:
         # Get the name from the header
         name = header['name']
         if name == 'Play':
-            audio_response = attachment
-            # Play audio feedback for AudioPlayer
-            self.alexa_audio_instance.play_mp3(audio_response)
+            if attachment is None:
+                audio_list = payload['audioItem']['stream']['url']
+                audio_url = self.alexa.get_audio_list(audio_list)
+                self.alexa_audio_instance.play_stream(audio_url)
+            else:
+                audio_response = attachment
+                self.alexa_audio_instance.play_mp3(audio_response)
             # TODO verify this is configured correctly
             # even though it plays the audio
         # Throw an error if the name is not recognized.

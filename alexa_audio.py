@@ -38,7 +38,7 @@ class AlexaAudio:
         """
         # Create a speech recognizer
         r = speech_recognition.Recognizer()
-        with speech_recognition.Microphone(device_index=0) as source:
+        with speech_recognition.Microphone() as source:
             if timeout is None:
                 # Prompt user to say something
                 print("You can start talking now...")
@@ -73,11 +73,13 @@ class AlexaAudio:
             f.write(raw_audio)
 
         # Convert mp3 response to wave (pyaudio doesn't work with MP3 files)
-        subprocess.call(['ffmpeg', '-y', '-i', 'files/response.mp3', 'files/response.wav'],
+        #subprocess.call(['ffmpeg', '-y', '-i', 'files/response.mp3', 'files/response.wav'],
+        #                stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.call(['play', 'files/response.mp3'],
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
         # Play a wave file directly
-        self.play_wav('files/response.wav')
+        #self.play_wav('files/response.wav')
 
     def play_wav(self, file, timeout=None, stop_event=None, repeat=False):
         """ Play a wave file using PyAudio. The file must be specified as a path.

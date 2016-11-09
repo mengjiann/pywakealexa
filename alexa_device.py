@@ -256,14 +256,15 @@ class AlexaDevice:
         # Not sure if this is even possible based on the AVS API.
         #if len(message['attachment']) > 1:
         #    raise IndexError("Too many attachments (%d)" % len(message['attachment']))
-
-        if not message['attachment']:
-            attachment = None
             
         # print("%d messages received" % len(message['content']))
         # Loop through all content received
-        for i, attachment in enumerate(message['attachment']):
+        for i, content in enumerate(message['content']):
             content = message['content'][i]
+            try:
+                attachment = message['attachment'][i]
+            except IndexError:
+                attachment = None
             header = content['directive']['header']
 
             # Get the namespace from the header and call the correct process directive function

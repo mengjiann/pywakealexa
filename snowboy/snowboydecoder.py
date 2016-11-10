@@ -169,7 +169,6 @@ class HotwordDetector(object):
                 logger.info(message)
                 callback = detected_callback[ans-1]
                 if callback is not None:
-                    play_audio_file()
                     self.stream_in.stop_stream()
                     callback()
                     self.stream_in.start_stream()

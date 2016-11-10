@@ -16,15 +16,23 @@ def user_input_loop(alexa_device):
         This is currently the "main" thread for the device.
     """
 
-    models = ['files/alexa.umdl', 'files/pause.pmdl']
-    detector = snowboydecoder.HotwordDetector(models, sensitivity=0.45)
+    models = ['files/alexa.umdl', 'files/play.pmdl', 'files/pause.pmdl', 'files/stop.pmdl']
+    detector = snowboydecoder.HotwordDetector(models, sensitivity=0.5)
     print('Listening... Press Ctrl+C to exit')
     
     # main Snowboy detector loop
-    detector.start(detected_callback=[alexa_device.user_initiate_audio, stop_mpc],
+    detector.start(detected_callback=[alexa_device.user_initiate_audio, play_mpc, pause_mpc, stop_mpc],
                    sleep_time=0.03)
     detector.terminate()
-    
+ 
+def play_mpc():
+    subprocess.call(['mpc', 'play'],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        
+def pause_mpc():
+    subprocess.call(['mpc', 'pause'],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+   
 def stop_mpc():
     subprocess.call(['mpc', 'clear'],
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)

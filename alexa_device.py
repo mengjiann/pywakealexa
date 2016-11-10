@@ -199,7 +199,6 @@ class AlexaDevice:
         raw_audio = self.alexa_audio_instance.get_audio()
         if raw_audio is None:
             return
-        self.alexa_audio_instance.play_wav('files/dong.wav')
 
         # TODO make it so the response can be interrupted by user if desired (maybe start a thread)
         stream_id = self.alexa.start_recognize_event(raw_audio)
@@ -261,6 +260,7 @@ class AlexaDevice:
         # Loop through all content received
         for i, content in enumerate(message['content']):
             content = message['content'][i]
+            print(content)
             try:
                 attachment = message['attachment'][i]
             except IndexError:

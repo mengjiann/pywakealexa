@@ -39,21 +39,18 @@ class AlexaAudio:
         # Create a speech recognizer
         r = speech_recognition.Recognizer()
         with speech_recognition.Microphone() as source:
+            self.play_wav('files/ding.wav')
+            r.adjust_for_ambient_noise(source)
             if timeout is None:
-                # Prompt user to say something
-                print("You can start talking now...")
-                # TODO add sounds to prompt the user to do something, rather than text
-                # Record audio until the user stops talking
                 audio = r.listen(source)
             else:
-                print("Start talking now, you have %d seconds" % timeout)
-                # TODO add sounds to prompt the user to do something, rather than text
                 try:
                     audio = r.listen(source, timeout=timeout)
                 except speech_recognition.WaitTimeoutError:
                     return None
         # Convert audio to raw_data (PCM)
         raw_audio = audio.get_raw_data()
+        self.play_wav('files/dong.wav')
 
         # Rather than recording, read a pre-recorded example (for testing)
         # with open('files/example_get_time.pcm', 'rb') as f:

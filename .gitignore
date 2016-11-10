@@ -9,3 +9,4 @@ ffmpeg
 main_developer.py
 files/sphinx
 files/sphinx.log
+*.pyc

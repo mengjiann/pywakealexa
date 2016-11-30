@@ -1,6 +1,5 @@
 
-import pyaudio
-import wave
+import vlc
 import subprocess
 import speech_recognition
 import time
@@ -17,14 +16,14 @@ class AlexaAudio:
     def __init__(self):
         """ AlexaAudio initialization function.
         """
-        # Initialize pyaudio
-        self.pyaudio_instance = pyaudio.PyAudio()
+
+        self.audio_playing = False
 
     def close(self):
         """ Called when the AlexaAudio object is no longer needed. This closes the PyAudio instance.
         """
         # Terminate the pyaudio instance
-        self.pyaudio_instance.terminate()
+        self.instance.close()
 
     def get_audio(self, timeout=None):
         """ Get audio from the microphone. The SpeechRecognition package is used to automatically stop listening
@@ -38,47 +37,27 @@ class AlexaAudio:
         """
         # Create a speech recognizer
         r = speech_recognition.Recognizer()
+        r.energy_threshold = 4000
         with speech_recognition.Microphone() as source:
-            self.play_wav('files/ding.wav')
             r.adjust_for_ambient_noise(source)
             if timeout is None:
+                self.play_audio('files/alexayes.mp3')
                 audio = r.listen(source)
             else:
                 try:
+                    self.play_audio('files/dong.wav')
                     audio = r.listen(source, timeout=timeout)
                 except speech_recognition.WaitTimeoutError:
                     return None
         # Convert audio to raw_data (PCM)
         raw_audio = audio.get_raw_data()
-        self.play_wav('files/dong.wav')
 
         # Rather than recording, read a pre-recorded example (for testing)
         # with open('files/example_get_time.pcm', 'rb') as f:
         #     raw_audio = f.read()
         return raw_audio
 
-    def play_mp3(self, raw_audio):
-        """ Play an MP3 file. Alexa uses the MP3 format for all audio responses. PyAudio does not support this, so
-            the MP3 file must first be converted to a wave file before playing.
-
-            This function assumes ffmpeg is located in the current working directory (ffmpeg/bin/ffmpeg).
-
-        :param raw_audio: the raw audio as a binary string
-        """
-        # Save MP3 data to a file
-        with open("files/response.mp3", 'wb') as f:
-            f.write(raw_audio)
-
-        # Convert mp3 response to wave (pyaudio doesn't work with MP3 files)
-        #subprocess.call(['ffmpeg', '-y', '-i', 'files/response.mp3', 'files/response.wav'],
-        #                stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        subprocess.call(['play', 'files/response.mp3'],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-        # Play a wave file directly
-        #self.play_wav('files/response.wav')
-
-    def play_stream(self, url):
+    def play_audio(self, file=None, raw_audio=None):
         """ Play an MP3 file. Alexa uses the MP3 format for all audio responses. PyAudio does not support this, so
             the MP3 file must first be converted to a wave file before playing.
 
@@ -87,48 +66,33 @@ class AlexaAudio:
         :param raw_audio: the raw audio as a binary string
         """
 
-        subprocess.call(['mpc', 'add', url],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        subprocess.call(['mpc', 'play'],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)                
+        while self.audio_playing:
+            time.sleep(1)
 
-    def play_wav(self, file, timeout=None, stop_event=None, repeat=False):
-        """ Play a wave file using PyAudio. The file must be specified as a path.
+        if raw_audio:
+            file = "files/response.mp3"
+            with open(file, 'wb') as f:
+                f.write(raw_audio)
 
-        :param file: path to wave file
-        """
-        # Open wave wave
-        with wave.open(file, 'rb') as wf:
-            # Create pyaudio stream
-            stream = self.pyaudio_instance.open(
-                        format=self.pyaudio_instance.get_format_from_width(wf.getsampwidth()),
-                        channels=wf.getnchannels(),
-                        rate=wf.getframerate(),
-                        output=True)
+        vlc_inst = vlc.Instance()
+        media = vlc_inst.media_new(file)
+        self.player = vlc_inst.media_player_new()
+        self.player.set_media(media)
+        mm = media.event_manager()
+        mm.event_attach(vlc.EventType.MediaStateChanged, self.state_callback, self.player)
+        self.player.play()
 
-            # Set chunk size for playback
-            chunk = 1024
-
-            # Get start time
-            start_time = time.mktime(time.gmtime())
-
-            end = False
-            while not end:
-                # Read first chunk of data
-                data = wf.readframes(chunk)
-                # Continue until there is no data left
-                while len(data) > 0 and not end:
-                    if timeout is not None and time.mktime(time.gmtime())-start_time > timeout:
-                        end = True
-                    if stop_event is not None and stop_event.is_set():
-                        end = True
-                    stream.write(data)
-                    data = wf.readframes(chunk)
-                if not repeat:
-                    end = True
-                else:
-                    wf.rewind()
-
-        # When done, stop stream and close
-        stream.stop_stream()
-        stream.close()
+    def state_callback(self, event, media_player):
+        state = media_player.get_state()
+        if state == 3:      # Playing
+            self.audio_playing = True
+            print('PLAYING')
+        elif state == 5:  # Stopped
+            self.audio_playing = False
+            print('STOPPED')
+        elif state == 6:  # Ended
+            self.audio_playing = False
+            print('ENDED')
+        elif state == 7:
+            self.audio_playing = False
+            print('ERROR')

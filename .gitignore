@@ -10,3 +10,5 @@ main_developer.py
 files/sphinx
 files/sphinx.log
 *.pyc
+.test/*
+example.py

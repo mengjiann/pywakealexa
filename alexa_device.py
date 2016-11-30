@@ -133,7 +133,7 @@ class AlarmManager:
         # If foreground
         if True:
             # Play in foreground for 30 seconds, unless stopped
-            self.audio.play_wav('files/alarm.wav',
+            self.audio.play_audio('files/alarm.wav',
                                 timeout=30, stop_event=self.alerts[token]['stop_event'], repeat=True)
             # Send status to alexa
             stream_id = self.alexa_device.alexa.send_event_alert_name('AlertEnteredForeground', token)
@@ -260,7 +260,6 @@ class AlexaDevice:
         # Loop through all content received
         for i, content in enumerate(message['content']):
             content = message['content'][i]
-            print(content)
             try:
                 attachment = message['attachment'][i]
             except IndexError:
@@ -294,13 +293,16 @@ class AlexaDevice:
         # Get the name from the header
         name = header['name']
         if name == 'Play':
+            audio_id = payload['audioItem']['audioItemId']
+            #stream_id = self.alexa.send_event_audio_started(audio_id)
             if attachment is None:
                 audio_list = payload['audioItem']['stream']['url']
                 audio_url = self.alexa.get_audio_list(audio_list)
-                self.alexa_audio_instance.play_stream(audio_url)
+                self.alexa_audio_instance.play_audio(audio_url)
             else:
                 audio_response = attachment
-                self.alexa_audio_instance.play_mp3(audio_response)
+                self.alexa_audio_instance.play_audio(raw_audio=audio_response)
+                #stream_id = self.alexa.send_event_audio_finished(audio_id)
             # TODO verify this is configured correctly
             # even though it plays the audio
         # Throw an error if the name is not recognized.
@@ -332,7 +334,7 @@ class AlexaDevice:
             stream_id = self.alexa.send_event_speech_started(token)
             self.alexa.get_and_process_response(stream_id)
             # Play the mp3 file
-            self.alexa_audio_instance.play_mp3(audio_response)
+            self.alexa_audio_instance.play_audio(raw_audio=audio_response)
             # Send SpeechFinished Event (with token)
             stream_id = self.alexa.send_event_speech_finished(token)
             self.alexa.get_and_process_response(stream_id)

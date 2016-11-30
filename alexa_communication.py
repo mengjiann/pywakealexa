@@ -244,7 +244,7 @@ class AlexaConnection:
                     # TODO somehow message ends up being empty
                     self.process_response_handle(message)
             # Check for new data every 0.5 seconds
-            time.sleep(0.1)
+            time.sleep(0.5)
 
     def ping_thread(self):
         """ This functions runs as a thread, and will send a ping request every 4 minutes. This ping
@@ -260,11 +260,9 @@ class AlexaConnection:
             # If anything goes wrong, reset the connection
             except:
                 print("Ping not successful.")
-                self.lock.acquire()
-                self.connection.close()
-                self.lock.release()
                 # Reinitialize the connection
                 self.init_connection()
+                self.close()
                 break
             # If ping failed and did not result in correct response
             if data.status != 204:
@@ -272,11 +270,9 @@ class AlexaConnection:
                 print(data.read())
                 print("Ping not successful.")
                 # Close connection
-                self.lock.acquire()
-                self.connection.close()
-                self.lock.release()
                 # Reinitialize the connection
                 self.init_connection()
+                self.close()
                 break
             # Captures the current time before sleeping
             start_sleep_time = time.mktime(time.gmtime())
@@ -500,6 +496,36 @@ class AlexaConnection:
         # Take the response, and parse it
         message = parse_response(response)
         self.process_response_handle(message)
+
+    def send_event_audio_started(self, token):
+        """ API specific function that sends the SpeechSynthesizer.SpeechStarted event. The response is not read
+        in this function.
+
+        :param token: token for the current Speak directive
+        :return: the stream_id associated with the request
+        """
+        header = {
+            'namespace': "AudioPlayer",
+            'name': "SpeechStarted"
+        }
+        payload = {'token': token}
+        stream_id = self.send_event(header, payload=payload)
+        return stream_id
+
+    def send_event_audio_finished(self, token):
+        """ API specific function that sends the SpeechSynthesizer.SpeechFinished event. The response is not read
+        in this function.
+
+        :param token: token for the current Speak directive
+        :return: the stream_id associated with the request
+        """
+        header = {
+            'namespace': "SpeechSynthesizer",
+            'name': "SpeechFinished"
+        }
+        payload = {'token': token}
+        stream_id = self.send_event(header, payload=payload)
+        return stream_id
 
     def send_event_speech_started(self, token):
         """ API specific function that sends the SpeechSynthesizer.SpeechStarted event. The response is not read

@@ -124,12 +124,12 @@ def parse_data(data, boundary):
         # Check the content type, should be json or octet
         if content_type == b'application/json; charset=UTF-8' or content_type == b'application/json':
             # If JSON, add to content
-            message['content'].append(json.loads(message_content.decode()))
+            message['content'].append(json.loads(message_content.decode('utf-8')))
         elif content_type == b'application/octet-stream':
             # If octet stream, add to attachment
             message['attachment'].append(message_content)
         else:
-            raise NameError("Content type not recognized (%s)" % content_type.decode())
+            raise NameError("Content type not recognized (%s)" % content_type.decode('utf-8'))
 
     return message
 
@@ -278,7 +278,7 @@ class AlexaConnection:
             start_sleep_time = time.mktime(time.gmtime())
             # Loops every 1 second, to see if correct time has passed (4 minutes) or the stop event is set
             while not self.thread_stop_event.is_set() \
-                    and (time.mktime(time.gmtime()) - start_sleep_time) < 4*60:
+                    and (time.mktime(time.gmtime()) - start_sleep_time) < 5*60:
                 time.sleep(1)
         print("Closing ping thread.")
 
@@ -420,6 +420,7 @@ class AlexaConnection:
             body_string += ("\n" + start_audio).encode() + audio
         # Add final boundary
         body_string += ("--" + self.boundary + "--").encode()
+        
 
         # Send request and return stream_id
         return self.send_request('GET', '/events', body=body_string)
@@ -442,7 +443,7 @@ class AlexaConnection:
             if 'audio/x-mpegurl' in request.headers['content-type']:
                 response = request.text
                 audio_list = response.split('\n')
-                if len(audio_list) >= 1:
+                if len(audio_list) > 0:
                     return audio_list[0]
             else:
                 return url
@@ -490,40 +491,54 @@ class AlexaConnection:
 
         # If not OK response status, throw error
         if response.status != 200:
-            print(response.read())
-            raise NameError("Bad status (%s)" % response.status)
+            print("Bad status (%s)" % response.status)
 
         # Take the response, and parse it
         message = parse_response(response)
         self.process_response_handle(message)
 
-    def send_event_audio_started(self, token):
+    def process_response(self, response):
+        """ For a specified stream_id, get AVS's response and process it. The request must have been sent before calling
+            this function.
+
+        :param stream_id: stream_id used for the request
+        """
+        # Take the response, and parse it
+        message = parse_response(response)
+        self.process_response_handle(message)
+    
+    def send_event_volume_changed(self, volume):
+        muted = False
+        if volume <= 0:
+            muted = True
+
+        header = {
+            "namespace": "Speaker",
+            "name": "VolumeChanged"
+        }
+        payload = {
+            "volume": volume,
+            "muted": muted
+        }
+        stream_id = self.send_event(header, payload=payload)
+        return stream_id
+        
+    def send_event_queue_cleared(self):       
+        header = {
+            "namespace": "AudioPlayer",
+            "name": "PlaybackQueueCleared",
+        }
+        stream_id = self.send_event(header)
+        return stream_id
+
+    def send_event_audio(self, header, token):
         """ API specific function that sends the SpeechSynthesizer.SpeechStarted event. The response is not read
         in this function.
 
         :param token: token for the current Speak directive
         :return: the stream_id associated with the request
         """
-        header = {
-            'namespace': "AudioPlayer",
-            'name': "SpeechStarted"
-        }
-        payload = {'token': token}
-        stream_id = self.send_event(header, payload=payload)
-        return stream_id
-
-    def send_event_audio_finished(self, token):
-        """ API specific function that sends the SpeechSynthesizer.SpeechFinished event. The response is not read
-        in this function.
-
-        :param token: token for the current Speak directive
-        :return: the stream_id associated with the request
-        """
-        header = {
-            'namespace': "SpeechSynthesizer",
-            'name': "SpeechFinished"
-        }
-        payload = {'token': token}
+        payload = {'token': token, "offsetInMilliseconds": 0}
         stream_id = self.send_event(header, payload=payload)
         return stream_id
 
@@ -568,20 +583,4 @@ class AlexaConnection:
             'name': 'ExpectSpeechTimedOut'
         }
         stream_id = self.send_event(header)
-        return stream_id
-
-    def send_event_alert_name(self, name, token):
-        """ API specific function that sends a event within the Alerts namespace. The response is not read in
-            this function.
-
-        :param name: name of event within the Alerts namesapce
-        :param token: token for alert
-        :return: the stream_id associated with the request
-        """
-        header = {
-            'namespace': 'Alerts',
-            'name': name
-        }
-        payload = {'token': token}
-        stream_id = self.send_event(header, payload=payload)
         return stream_id

@@ -1,0 +1,47 @@
+Language model created by QuickLM on Sat Dec 24 15:23:40 EST 2016
+Copyright (c) 1996-2010 Carnegie Mellon University and Alexander I. Rudnicky
+
+The model is in standard ARPA format, designed by Doug Paul while he was at MITRE.
+
+The code that was used to produce this language model is available in Open Source.
+Please visit http://www.speech.cs.cmu.edu/tools/ for more information
+
+The (fixed) discount mass is 0.5. The backoffs are computed using the ratio method.
+This model based on a corpus of 4 sentences and 7 words
+
+\data\
+ngram 1=7
+ngram 2=9
+ngram 3=8
+
+\1-grams:
+-0.9031 </s> -0.3010
+-0.9031 <s> -0.2430
+-0.9031 JARVIS -0.1938
+-1.5051 QUIET -0.2430
+-1.5051 SLEEP -0.2430
+-1.5051 UP -0.2430
+-1.5051 WAKE -0.2872
+
+\2-grams:
+-0.3010 <s> JARVIS 0.0000
+-0.9031 JARVIS </s> -0.3010
+-0.9031 JARVIS QUIET 0.0000
+-0.9031 JARVIS SLEEP 0.0000
+-0.9031 JARVIS WAKE 0.0000
+-0.3010 QUIET </s> -0.3010
+-0.3010 SLEEP </s> -0.3010
+-0.3010 UP </s> -0.3010
+-0.3010 WAKE UP 0.0000
+
+\3-grams:
+-0.9031 <s> JARVIS </s>
+-0.9031 <s> JARVIS QUIET
+-0.9031 <s> JARVIS SLEEP
+-0.9031 <s> JARVIS WAKE
+-0.3010 JARVIS QUIET </s>
+-0.3010 JARVIS SLEEP </s>
+-0.3010 JARVIS WAKE UP
+-0.3010 WAKE UP </s>
+
+\end\

@@ -1,98 +1,278 @@
-
-import vlc
 import subprocess
-import speech_recognition
 import time
+import os
+import tempfile
+import threading
+import webrtcvad
+import alsaaudio
+import vlc
+from collections import deque
+from multiprocessing import Queue
+from pocketsphinx import pocketsphinx
+
 
 __author__ = "NJC"
 __license__ = "MIT"
 
+vad = webrtcvad.Vad(2)
 
-class AlexaAudio:
-    """ This object handles all audio playback and recording required by the Alexa enabled device. Audio playback
-        and recording both use the PyAudio package.
+# constants
+VAD_SAMPLERATE = 16000
+VAD_FRAME_MS = 30
+VAD_PERIOD = (VAD_SAMPLERATE / 1000) * VAD_FRAME_MS
+VAD_SILENCE_TIMEOUT = 1000
+VAD_THROWAWAY_FRAMES = 10
+MAX_RECORDING_LENGTH = 8
+MAX_VOLUME = 100
+MIN_VOLUME = 30
 
-    """
-    def __init__(self):
-        """ AlexaAudio initialization function.
-        """
+class Speech(object):
+    def __init__(self, trigger_word):
+        self.trigger_word = trigger_word
+        self.build_decoder()
 
-        self.audio_playing = False
+    def connect(self):
 
-    def close(self):
-        """ Called when the AlexaAudio object is no longer needed. This closes the PyAudio instance.
-        """
-        # Terminate the pyaudio instance
-        self.instance.close()
+        inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL)
+        inp.setchannels(1)
+        inp.setrate(16000)
+        inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+        inp.setperiodsize(1024)
 
-    def get_audio(self, timeout=None):
-        """ Get audio from the microphone. The SpeechRecognition package is used to automatically stop listening
-            when the user stops speaking. A timeout can also be specified. If the timeout is reached, the function
-            returns None.
+        record_audio = False
+        while not record_audio:
+            time.sleep(.1)
 
-            This function can also be used for debugging purposes to read an example audio file.
+            triggered = False
+            while not triggered:
+                _, buf = inp.read()
+                self.decoder.process_raw(buf, False, False)
+                triggered = self.decoder.hyp() is not None
 
-        :param timeout: timeout in seconds, when to give up if the user did not speak.
-        :return: the raw binary audio string (PCM)
-        """
-        # Create a speech recognizer
-        r = speech_recognition.Recognizer()
-        r.energy_threshold = 4000
-        with speech_recognition.Microphone() as source:
-            r.adjust_for_ambient_noise(source)
-            if timeout is None:
-                self.play_audio('files/alexayes.mp3')
-                audio = r.listen(source)
-            else:
-                try:
-                    self.play_audio('files/dong.wav')
-                    audio = r.listen(source, timeout=timeout)
-                except speech_recognition.WaitTimeoutError:
-                    return None
-        # Convert audio to raw_data (PCM)
-        raw_audio = audio.get_raw_data()
+            record_audio = True
+    
+        inp.close()
 
-        # Rather than recording, read a pre-recorded example (for testing)
-        # with open('files/example_get_time.pcm', 'rb') as f:
-        #     raw_audio = f.read()
-        return raw_audio
+        self.decoder.end_utt()
+        self.decoder.start_utt()
 
-    def play_audio(self, file=None, raw_audio=None):
-        """ Play an MP3 file. Alexa uses the MP3 format for all audio responses. PyAudio does not support this, so
-            the MP3 file must first be converted to a wave file before playing.
+    def build_decoder(self):
+        model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'files/sphinx')
+        dict_file = '{}.dict'.format(self.trigger_word)
+        ps_config = pocketsphinx.Decoder.default_config()
+        ps_config.set_string('-hmm', os.path.join(model_path, 'acoustic-model'))
+        ps_config.set_string('-dict', os.path.join(model_path, dict_file))
+        ps_config.set_string('-keyphrase', self.trigger_word.upper())
+        ps_config.set_float('-kws_threshold', 1e-20)
+        ps_config.set_string('-logfn', '/dev/null')
+        
+        self.decoder = pocketsphinx.Decoder(ps_config)
+        self.decoder.start_utt()
 
-            This function assumes ffmpeg is located in the current working directory (ffmpeg/bin/ffmpeg).
+    def get_audio(self, throwaway_frames=None):
+        inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL)
+        inp.setchannels(1)
+        inp.setrate(VAD_SAMPLERATE)
+        inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+        inp.setperiodsize(VAD_PERIOD)
+        audio = ""
+        
+        thresholdSilenceMet = False
+        frames = 0
+        numSilenceRuns = 0
+        silenceRun = 0
+        start = time.time()
 
-        :param raw_audio: the raw audio as a binary string
-        """
+        while frames < throwaway_frames:
+            length, data = inp.read()
+            frames = frames + 1
+            if length:
+                audio += data
 
-        while self.audio_playing:
+        while ((thresholdSilenceMet is False) and ((time.time() - start) < MAX_RECORDING_LENGTH)):
+            length, data = inp.read()
+            if length:
+                audio += data
+    
+                if length == VAD_PERIOD:
+                    isSpeech = vad.is_speech(data, VAD_SAMPLERATE)
+    
+                    if not isSpeech:
+                        silenceRun = silenceRun + 1
+                        # print "0"
+                    else:
+                        silenceRun = 0
+                        numSilenceRuns = numSilenceRuns + 1
+                        # print "1"
+
+            if (numSilenceRuns != 0) and ((silenceRun * VAD_FRAME_MS) > VAD_SILENCE_TIMEOUT):
+                thresholdSilenceMet = True
+
+        inp.close()
+        return audio
+
+class Player(object):
+    def __init__(self, callback_report):
+        self.__callback_report = callback_report
+
+        self.vlc_instance = None
+        self.player = None
+        self.media_vlc_instance = None
+        self.media_player = None
+
+        self.event_manager = None
+
+        self.queue = None
+        self.processing_queue = False
+
+        self.stream_id = None
+        self.is_playing = None
+
+        self.volume = None
+
+        self.blocking = False
+        self.required_progress_report = []
+        self.tmp_path = os.path.join(tempfile.mkdtemp(prefix='pywakealexa-runtime-'), '')
+        
+        self.instance = vlc.Instance('--alsa-audio-device=mono --file-logging --logfile=files/vlc-log.txt')
+
+    def setup(self, volume=50):
+        self.player = self.instance.media_player_new()
+        self.media_player = self.instance.media_player_new()
+        self.set_volume(volume)
+        self.queue = deque()
+        
+        print('Volume set to {}'.format(volume))
+
+    def _play(self, item):
+        instance = self.instance
+        media = instance.media_new(item['url'])
+        player = self.instance.media_player_new()
+        self.player = player
+        media.get_mrl()
+        player.set_media(media)
+        self.set_volume(self.volume)
+
+        player.set_time(item['offset'])  
+        player.play()
+
+        self.blocking = True
+        while player.get_state() not in [vlc.State.Ended,vlc.State.Stopped,vlc.State.Error]:
             time.sleep(1)
+        player.stop()
+        self.blocking = False
 
-        if raw_audio:
-            file = "files/response.mp3"
-            with open(file, 'wb') as f:
-                f.write(raw_audio)
+    def __play(self, item):
+        if item['report']: self.required_progress_report.append([item['streamId'],item['report']])
 
-        vlc_inst = vlc.Instance()
-        media = vlc_inst.media_new(file)
-        self.player = vlc_inst.media_player_new()
-        self.player.set_media(media)
-        mm = media.event_manager()
-        mm.event_attach(vlc.EventType.MediaStateChanged, self.state_callback, self.player)
-        self.player.play()
+        instance = self.instance
+        media = instance.media_new(item['url'])
+        player = self.instance.media_player_new()
+        self.media_player = player
+        media.get_mrl()
+        player.set_media(media)
+        self.set_volume(self.volume)
+        
+        event_manager = media.event_manager()
+        event_manager.event_attach(vlc.EventType.MediaStateChanged, self.state_callback, player, item['streamId'])
 
-    def state_callback(self, event, media_player):
-        state = media_player.get_state()
-        if state == 3:      # Playing
-            self.audio_playing = True
-            print('PLAYING')
-        elif state == 5:  # Stopped
-            self.audio_playing = False
-            print('STOPPED')
-        elif state == 6:  # Ended
-            self.audio_playing = False
-            print('ENDED')
-        elif state == 7:
-            self.audio_playing = False
-            print('ERROR')
+        while self.blocking: time.sleep(1)
+        player.set_time(item['offset'])  
+        player.play()
+        while player.get_state() not in [vlc.State.Ended,vlc.State.Stopped,vlc.State.Error]:
+            time.sleep(1)
+        player.stop()
+
+    def queued_play(self, url, offset=0, audio_type='media', streamId=None, report={}):
+        item = {
+            'url': url,
+            'offset': offset,
+            'audio_type': audio_type,
+            'streamId': streamId,
+            'report': report
+        }
+
+        self.queue.append(item)
+        if not self.processing_queue:
+            pqReady = threading.Event()
+            pqThread = threading.Thread(target=self.process_queue, kwargs={'reportReady': pqReady})
+            pqThread.start()
+    
+            pqReady.wait()
+
+    def blocking_play(self, url, offset=0, audio_type='speech', streamId=None):
+        item = {
+            'url': url,
+            'offset': offset,
+            'audio_type': audio_type,
+            'streamId': streamId
+        }
+
+        self._play(item)
+
+    def process_queue(self, reportReady=None):
+        self.processing_queue = True
+        if reportReady:
+            reportReady.set()
+
+        while len(self.queue):
+            item = self.queue.popleft()
+            self.__play(item)
+
+            if len(self.queue) > 0:
+                time.sleep(0.5)
+        self.processing_queue = False
+
+    def stop(self):
+        self.player.stop()
+        self.media_player.stop()
+        self.blocking = False
+        self.processing_queue = False
+
+    def clear(self):
+        self.queue.clear()
+
+    def get_volume(self):
+        return self.volume
+    
+    def set_volume(self, volume):
+        self.volume = volume
+        self.player.audio_set_volume(volume)
+        self.media_player.audio_set_volume(volume)
+        
+    def __interval_progress_report(self, player, streamId, offset):
+        while player.get_state() != vlc.State.Ended:
+            time.sleep(offset/1000)
+            self.__callback_report('PROGRESS_REPORT_INTERVAL', "PLAYING", streamId)
+        self.__callback_report('PROGRESS_REPORT_INTERVAL', "IDLE", streamId)
+
+    def state_callback(self, event, player, streamId): # pylint: disable=unused-argument
+        state = player.get_state()
+        playerActivity = "IDLE" if state in [vlc.State.Stopped, vlc.State.Ended, vlc.State.Error] else "PLAYING"
+
+        if state in [vlc.State.Playing, vlc.State.Stopped, vlc.State.Ended, vlc.State.Error]:
+            report = {
+                vlc.State.Playing: "STARTED",
+                vlc.State.Stopped: "STOPPED",
+                vlc.State.Ended:  "FINISHED",
+                vlc.State.Error: "ERROR",
+            }
+            rThread = threading.Thread(target=self.__callback_report, args=(report[state], playerActivity, streamId))
+            rThread.start()
+
+        if len(self.required_progress_report):
+            check = [[i,report] for i,report in enumerate(self.required_progress_report) if report[0] == streamId]
+            if check:
+                _id = check[0][0]
+                report = check[0][1][1]
+                self.required_progress_report.pop(_id)
+                _type = report['type']
+                report_offset = report['offset']
+                if _type == 'delay':
+                    time.sleep(report['offset']/1000)
+                    self.__callback_report('PROGRESS_REPORT_DELAY', playerActivity, streamId)
+                    
+                if _type == 'interval':
+                    
+                    iThread = threading.Thread(target=self.__interval_progress_report, args=(player,streamId,report_offset))
+                    iThread.start()

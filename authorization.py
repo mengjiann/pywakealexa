@@ -13,7 +13,7 @@ from cherrypy.process import servers
 import requests
 import json
 import threading
-from urllib.parse import urlparse
+from urlparse import urlparse
 
 import helper
 

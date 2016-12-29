@@ -1,6 +1,6 @@
 # Disclaimer
 
-This is a modified version of Python Alexa Voice Service with Snowboy's voice recognition capabilities to register a wake up command for Alexa. This allows you to truly have hands free capabilities with Amazon's Alexa Voice Service without the need to press any buttons.
+A modified version of Python Alexa Voice Service to be ran on a Raspberry Pi with Audio Player functionality e.g. alexa - play, stop, next. A work in-progress but the code runs almost bug-free on my device, currently. Feel free to contribute.
 
 # Python Alexa Voice Service
 

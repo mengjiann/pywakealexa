@@ -11,11 +11,10 @@ __version__ = "0.2"
 
 
 def work(config):
-    volume = 35
-    trigger_word = 'jarvis'
-
+    volume = 40
+    
     alexa = alexa_device.AlexaDevice(config)
-    speech = alexa.set_speech_instance(trigger_word)
+    speech = alexa.set_speech_instance()
     player = alexa.set_player_instance(alexa.playback_progress_report_request)
     player.setup(volume)
     player.blocking_play('files/hello.mp3')

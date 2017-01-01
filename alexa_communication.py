@@ -107,7 +107,8 @@ def parse_data(data, boundary):
         message_chunk = part.split(b'\r\n\r\n')
         # If there are more than 2 chunks, throw an error (not sure if this is 100% correct)
         if len(message_chunk) != 2:
-            raise NameError("Too many parts to the sub-message! (%s)" % len(message_chunk))
+            print "Too many parts to the sub-message! (%s)" % len(message_chunk)
+            return
         # The first part is the header, the second is content. Strip both of white spaces.
         message_header = message_chunk[0].strip()
         message_content = message_chunk[1].strip()
@@ -185,7 +186,7 @@ class AlexaConnection:
 
         """
         # Open connection
-        self.connection = HTTP20Connection(self.url, port=443, secure=True, force_proto="h2", enable_push=True, timeout=60*60)
+        self.connection = HTTP20Connection(self.url, port=443, secure=True, force_proto="h2", enable_push=True)
 
         # First start downstream
         self.start_downstream()
@@ -261,8 +262,8 @@ class AlexaConnection:
             except:
                 print("Ping not successful.")
                 # Reinitialize the connection
-                self.init_connection()
                 self.close()
+                self.init_connection()
                 break
             # If ping failed and did not result in correct response
             if data.status != 204:
@@ -271,8 +272,8 @@ class AlexaConnection:
                 print("Ping not successful.")
                 # Close connection
                 # Reinitialize the connection
-                self.init_connection()
                 self.close()
+                self.init_connection()
                 break
             # Captures the current time before sleeping
             start_sleep_time = time.mktime(time.gmtime())
@@ -436,17 +437,6 @@ class AlexaConnection:
         result = self.connection.get_response(stream_id)
         self.lock.release()
         return result
-        
-    def get_audio_list(self, url):
-        request = requests.get(url)
-        if request.status_code == 200:
-            if 'audio/x-mpegurl' in request.headers['content-type']:
-                response = request.text
-                audio_list = response.split('\n')
-                if len(audio_list) > 0:
-                    return audio_list
-            else:
-                return url
 
     def start_recognize_event(self, raw_audio, dialog_request_id=None):
         """ Starts a SpeechRecognizer.Recognize event. Requires a raw_audio argument. The optional dialog_request_id

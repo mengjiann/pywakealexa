@@ -3,6 +3,7 @@ import helper
 import time
 import threading
 import traceback
+import tunein
 
 import requests
 import json
@@ -27,20 +28,22 @@ class AlexaDevice:
         """
         self.config = alexa_config
         self.alexa = None
+        self.muted = False
         self.previous_volume = 0
         self.player_instance = None
+        self.tunein_parser = tunein.TuneIn(5000)
         self.player_activity = {"playerActivity": "IDLE", "streamId": ""}
 
         self.device_stop_event = threading.Event()
         self.device_thread = threading.Thread(target=self.device_thread_function)
         self.device_thread.start()
 
-    def set_player_instance(self, playback_progress_report_request):
-        self.player_instance = alexa_audio.Player(playback_progress_report_request)
+    def set_player_instance(self, playback_progress_report_request, speaker_device):
+        self.player_instance = alexa_audio.Player(playback_progress_report_request, speaker_device)
         return self.player_instance
 
-    def set_speech_instance(self):
-        self.speech_instance = alexa_audio.Speech()
+    def set_speech_instance(self, mic_device):
+        self.speech_instance = alexa_audio.Speech(mic_device)
         return self.speech_instance
 
     def device_thread_function(self):
@@ -62,7 +65,7 @@ class AlexaDevice:
         # TODO If anything went wrong, and stop event is not set, start new thread automatically
 
     def user_initiate_audio(self):
-        self.player_instance.blocking_play("files/alexayes.mp3", trigger=True)
+        self.player_instance.blocking_play("files/alexayes.mp3")
         raw_audio = self.speech_instance.get_audio(self.player_instance)
         if raw_audio is None:
             return
@@ -106,7 +109,6 @@ class AlexaDevice:
             header = content['directive']['header']
             # Get the namespace from the header and call the correct process directive function
             namespace = header['namespace']
-            print content
             if namespace == 'SpeechSynthesizer':
                 self.process_directive_speech_synthesizer(content, attachment)
             elif namespace == 'SpeechRecognizer':
@@ -128,7 +130,7 @@ class AlexaDevice:
         request_id = False
         if 'dialogRequestId' in header: request_id = 'dialogRequestId'
         volume = self.player_instance.get_volume()
-        if not self.previous_volume:
+        if not self.previous_volume or volume > 0:
             self.previous_volume = volume
         if name in ['SetVolume', 'AdjustVolume']:
             adjust_volume = payload['volume']
@@ -137,9 +139,14 @@ class AlexaDevice:
             self.player_instance.set_volume(volume)
         elif name in ['Mute', 'SetMute']:
             if payload['mute']:
-                volume = 0
-                print 'Player State: Mute (true)'
-                self.player_instance.set_volume(volume)
+                if not self.muted:
+                    self.muted = True
+                    volume = 0
+                    print 'Player State: Mute'
+                    self.player_instance.set_volume(volume)
+                else:
+                    self.muted = False
+                    self.player_instance.set_volume(self.previous_volume)
             else:
                 self.player_instance.set_volume(self.previous_volume)
         else:
@@ -157,19 +164,12 @@ class AlexaDevice:
             if payload['clearBehavior'] == 'CLEAR_ALL':
                 self.player_instance.stop()
             self.player_instance.clear()
-            print 'Audio Player: Clear Queue'
             stream_id = self.alexa.send_event_queue_cleared()
             self.alexa.get_and_process_response(stream_id)
         elif name == 'Play':
             audio_id = payload['audioItem']['audioItemId']
             offset = payload['audioItem']['stream']['offsetInMilliseconds']
-            if payload['playBehavior'] == 'REPLACE_ALL':
-                self.player_instance.stop()
-                self.player_instance.clear()
-                print 'Audio Player: Play (REPLACE_ALL)'
-            if payload['playBehavior'] == 'REPLACE_ENQUEUED':
-                self.player_instance.clear()
-                print 'Audio Player: Play (REPLACE_ENQUEUED)'
+            behavior = payload['playBehavior']
             if 'progressReport' in payload['audioItem']['stream']:
                 r = payload['audioItem']['stream']['progressReport']
                 if 'progressReportDelayInMilliseconds' in payload['audioItem']['stream']['progressReport']:
@@ -177,27 +177,39 @@ class AlexaDevice:
                 elif 'progressReportIntervalInMilliseconds' in payload['audioItem']['stream']['progressReport']:
                     report = {'type': 'interval', 'offset': r['progressReportIntervalInMilliseconds']-offset}
             if attachment is None:
-                audio_list = payload['audioItem']['stream']['url']
-                audio_url = self.alexa.get_audio_list(audio_list)
-                self.player_instance.queued_play(audio_url, streamId=audio_id, offset=offset, report=report)
+                audio_url = payload['audioItem']['stream']['url']
+                if audio_url.startswith("cid:"):
+                    audio_url = "file://" + tmp_path + audio_url.lstrip("cid:") + ".mp3"
+                if audio_url.find('radiotime.com') != -1:
+                    audio_url = self.tunein_playlist(audio_url)
+                self.player_instance.queued_play(audio_url, streamId=audio_id, offset=offset, report=report, behavior=behavior)
             else:
                 audio_response = attachment
                 audio_file = self.player_instance.tmp_path + "audio.mp3"
                 with open(audio_file, 'wb') as f:
                     f.write(audio_response)
-                self.player_instance.blocking_play(audio_file, streamId=audio_id, offset=offset)
+                print audio_file
+                self.player_instance.blocking_play(audio_file, streamId=audio_id, offset=offset, behavior=behavior)
         elif name == 'Stop':
-            print 'Audio Player: Stop'
             self.player_instance.stop()
         else:
             print "Name not recognized (%s)." % name
+
+    def tunein_playlist(self, url):
+        req = requests.get(url)
+        lines = req.content.split('\n')
+
+        nurl = self.tunein_parser.parse_stream_url(lines[0])
+        if (len(nurl) != 0):
+            return nurl[0]
+
+        return ""
 
     def process_directive_speech_synthesizer(self, content, attachment):
         header = content['directive']['header']
         payload = content['directive']['payload']
 
         name = header['name']
-        print 'Audio Player: Response'
         if name == 'Speak':
             token = payload['token']
             if attachment:
@@ -224,7 +236,7 @@ class AlexaDevice:
 
             file = "files/beep.wav"
             self.player_instance.blocking_play(file, streamId=dialog_request_id)
-            raw_audio = self.speech_instance.get_audio(timeout)
+            raw_audio = self.speech_instance.get_audio(self.player_instance, throwaway_frames=timeout)
             if raw_audio is None:
                 print("Speech timeout.")
                 stream_id = self.alexa.send_event_expect_speech_timed_out()
@@ -250,6 +262,8 @@ class AlexaDevice:
             reports = ["PlaybackNearlyFinished", "PlaybackFinished"]
         elif requestType.upper() == "STOPPED":
             reports = ["PlaybackStopped"]
+        elif requestType.upper() == "PAUSED":
+            reports = ["PlaybackPaused"]
         elif requestType.upper() == "ERROR":
             reports = ["PlaybackFailed"]
             #stream_id = self.alexa.send_event_playback_failed(streamId)

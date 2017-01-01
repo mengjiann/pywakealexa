@@ -11,11 +11,15 @@ __version__ = "0.2"
 
 
 def work(config):
-    volume = 50
+    volume = 30
+    
+    speaker_device = 'pulse'
+    # defualt if pulseaudio otherwise plughw:[CARDID]
+    mic_device = 'default'
 
     alexa = alexa_device.AlexaDevice(config)
-    speech = alexa.set_speech_instance()
-    player = alexa.set_player_instance(alexa.playback_progress_report_request)
+    speech = alexa.set_speech_instance(mic_device)
+    player = alexa.set_player_instance(alexa.playback_progress_report_request, speaker_device)
     player.setup(volume)
     player.blocking_play('files/hello.mp3')
     while True:

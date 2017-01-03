@@ -433,6 +433,7 @@ class AlexaConnection:
         :param stream_id: stream_id used to get the response
         :return: the resulting response object (hyper.HTTP20Response)
         """
+        result = None
         self.lock.acquire()
         try:
             result = self.connection.get_response(stream_id)
@@ -487,9 +488,10 @@ class AlexaConnection:
             print("Bad status (%s)" % response.status)
 
         # Take the response, and parse it
-        message = parse_response(response)
-        if message is not None:
-            self.process_response_handle(message)
+        if response is not None:
+            message = parse_response(response)
+            if message is not None:
+                self.process_response_handle(message)
 
     def process_response(self, response):
         """ For a specified stream_id, get AVS's response and process it. The request must have been sent before calling

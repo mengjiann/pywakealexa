@@ -22,9 +22,9 @@ This project is a Python implementation of Amazon's Alexa Voice Service (AVS). T
 	- [cherrypy](http://www.cherrypy.org/)
     - [requests](http://docs.python-requests.org/en/master/)
     - [hyper](https://hyper.readthedocs.org/en/latest/) (developer branch)
-	- [pyaudio](https://people.csail.mit.edu/hubert/pyaudio/)
-	- alsaaudio
+	- pyalsaaudio
     - webrtcvad
     - pocketsphinx
     - vlc
+
 - [Microphone](http://a.co/eHZgfoT) and speaker

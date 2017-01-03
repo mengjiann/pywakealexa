@@ -70,7 +70,7 @@ class Speech(object):
         self.decoder = pocketsphinx.Decoder(ps_config)
         self.decoder.start_utt()
 
-    def get_audio(self, player_instance, throwaway_frames=None):
+    def get_audio(self, player_instance, throwaway_frames=0):
         inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
         inp.setchannels(1)
         inp.setrate(VAD_SAMPLERATE)
@@ -84,7 +84,6 @@ class Speech(object):
         silenceRun = 0
         start = time.time()
         player_instance.media_player.pause()
-        # if throwaway_frames is None: throwaway_frames = VAD_THROWAWAY_FRAMES
         while frames < throwaway_frames:
             length, data = inp.read()
             frames = frames + 1
@@ -147,9 +146,8 @@ class Player(object):
         self.player_instance = vlc.Instance('--alsa-audio-device={} --file-logging --logfile=/dev/null'.format(self.speaker_device))
 
     def setup(self, volume=50):
-        instance = self.player_instance
-        self.player = instance.media_player_new()
-        self.media_player = instance.media_player_new()
+        self.player = self.player_instance.media_player_new()
+        self.media_player = self.player_instance.media_player_new()
         self.set_volume(volume)
         
         print('Volume set to {}'.format(volume))
@@ -157,28 +155,30 @@ class Player(object):
     def __play(self, item):
         print 'Audio request: {}'.format(item['url'])
         if (item['audio_type'] == 'media'):
-            instance = self.player_instance
-            player = instance.media_player_new()
+            player = self.player_instance.media_player_new()
             self.media_player = player
         else:
-            instance = self.player_instance
             player = self.player_instance.media_player_new()
             self.player = player
         
-        media = instance.media_new(item['url'])
+        media = self.player_instance.media_new(item['url'])
         media.get_mrl()
         player.set_media(media)
+        player.audio_set_volume(self.volume)
         if item['audio_type'] == 'media':
             if item['report']: self.required_progress_report.append([item['streamId'],item['report']])
             event_manager = media.event_manager()
             event_manager.event_attach(vlc.EventType.MediaStateChanged, self.state_callback, player, item['streamId'])
+
         player.set_time(item['offset'])
         if (item['audio_type'] == 'speech'):
             self.media_player.pause()
+
         player.play()
         while player.get_state() not in [vlc.State.Ended,vlc.State.Stopped,vlc.State.Error]:
             time.sleep(1)
         player.stop()
+
         if (item['audio_type'] == 'speech'):
             self.media_player.play()
 

@@ -3,19 +3,25 @@ import authorization
 import alexa_device
 import alexa_audio
 import sys
+import signal
 import time
 
 __author__ = "NJC"
 __license__ = "MIT"
 __version__ = "0.2"
 
+def cleanup(signal, frame):
+    sys.exit(0)
 
 def work(config):
-    volume = 30
+    volume = 40
     
     speaker_device = 'pulse'
     # defualt if pulseaudio otherwise plughw:[CARDID]
     mic_device = 'default'
+
+    for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, signal.SIGSEGV, signal.SIGTERM):
+        signal.signal(sig, cleanup)
 
     alexa = alexa_device.AlexaDevice(config)
     speech = alexa.set_speech_instance(mic_device)
@@ -35,6 +41,5 @@ if __name__ == "__main__":
         print("Please go to http://localhost:5000")
         authorization.get_authorization()
         config = helper.read_dict('config.dict')
-    
-    player = None
+
     work(config)

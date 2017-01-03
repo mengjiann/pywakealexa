@@ -202,6 +202,7 @@ class AlexaConnection:
             raise NameError("Bad status (%s)" % data.status)
 
         # Start ping thread
+        self.thread_stop_event.clear()
         ping_thread = threading.Thread(target=self.ping_thread)
         ping_thread.start()
 
@@ -217,8 +218,8 @@ class AlexaConnection:
         self.downstream_id = self.send_request('GET', '/directives')
         downstream_response = self.get_response(self.downstream_id)
         if downstream_response.status != 200:
-            print(downstream_response.read())
-            #raise NameError("Bad status (%s)" % downstream_response.status)
+            #print(downstream_response.read())
+            print "Bad status (%s)" % downstream_response.status
         self.downstream_boundary = get_boundary_from_response(downstream_response)
         if lock:
             self.lock.release()
@@ -236,14 +237,13 @@ class AlexaConnection:
         while not self.thread_stop_event.is_set():
             # Only do stuff if there is data ready in the stream
             if len(actual_stream.data) > 1:
-                # self.lock.acquire()
                 # Get data from the downstream
                 new_data, actual_stream.data = read_from_downstream(self.downstream_boundary, actual_stream.data)
 
                 if len(new_data) > 0:
                     message = parse_data(new_data, self.downstream_boundary)
-                    # TODO somehow message ends up being empty
-                    self.process_response_handle(message)
+                    if messsage:
+                        self.process_response_handle(message)
             # Check for new data every 0.5 seconds
             time.sleep(0.5)
 
@@ -253,6 +253,7 @@ class AlexaConnection:
             connection is reestablished using self.init_connection().
         """
         # Run and wait until ping thread is stopped
+        i = 0
         while not self.thread_stop_event.is_set():
             # Try to send ping request, and get the response
             try:
@@ -267,11 +268,7 @@ class AlexaConnection:
                 break
             # If ping failed and did not result in correct response
             if data.status != 204:
-                # Print data for debugging
-                print(data.read())
                 print("Ping not successful.")
-                # Close connection
-                # Reinitialize the connection
                 self.close()
                 self.init_connection()
                 break
@@ -279,7 +276,7 @@ class AlexaConnection:
             start_sleep_time = time.mktime(time.gmtime())
             # Loops every 1 second, to see if correct time has passed (4 minutes) or the stop event is set
             while not self.thread_stop_event.is_set() \
-                    and (time.mktime(time.gmtime()) - start_sleep_time) < 5*60:
+                    and (time.mktime(time.gmtime()) - start_sleep_time) < 4*60:
                 time.sleep(1)
         print("Closing ping thread.")
 
@@ -378,10 +375,13 @@ class AlexaConnection:
 
         # Send actual request
         self.lock.acquire()
-        if body is not None:
-            stream_id = self.connection.request(method, path, headers=headers, body=body)
-        else:
-            stream_id = self.connection.request(method, path, headers=headers)
+        try:
+            if body is not None:
+                stream_id = self.connection.request(method, path, headers=headers, body=body)
+            else:
+                stream_id = self.connection.request(method, path, headers=headers)
+        except:
+            pass
         self.lock.release()
 
         return stream_id
@@ -434,7 +434,10 @@ class AlexaConnection:
         :return: the resulting response object (hyper.HTTP20Response)
         """
         self.lock.acquire()
-        result = self.connection.get_response(stream_id)
+        try:
+            result = self.connection.get_response(stream_id)
+        except:
+            pass
         self.lock.release()
         return result
 
@@ -485,7 +488,8 @@ class AlexaConnection:
 
         # Take the response, and parse it
         message = parse_response(response)
-        self.process_response_handle(message)
+        if message is not None:
+            self.process_response_handle(message)
 
     def process_response(self, response):
         """ For a specified stream_id, get AVS's response and process it. The request must have been sent before calling

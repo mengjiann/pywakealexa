@@ -134,7 +134,6 @@ class AlexaDevice:
             self.previous_volume = volume
         if name in ['SetVolume', 'AdjustVolume']:
             adjust_volume = payload['volume']
-            print 'Player State: Volume adjust {}'.format(adjust_volume)
             volume = self.player_instance.get_volume() + adjust_volume
             self.player_instance.set_volume(volume)
         elif name in ['Mute', 'SetMute']:
@@ -142,7 +141,6 @@ class AlexaDevice:
                 if not self.muted:
                     self.muted = True
                     volume = 0
-                    print 'Player State: Mute'
                     self.player_instance.set_volume(volume)
                 else:
                     self.muted = False
@@ -160,6 +158,7 @@ class AlexaDevice:
 
         report = False
         name = header['name']
+
         if name == 'ClearQueue':
             if payload['clearBehavior'] == 'CLEAR_ALL':
                 self.player_instance.stop()
@@ -176,6 +175,7 @@ class AlexaDevice:
                     report = {'type': 'delay', 'offset': r['progressReportDelayInMilliseconds']}
                 elif 'progressReportIntervalInMilliseconds' in payload['audioItem']['stream']['progressReport']:
                     report = {'type': 'interval', 'offset': r['progressReportIntervalInMilliseconds']-offset}
+
             if attachment is None:
                 audio_url = payload['audioItem']['stream']['url']
                 if audio_url.startswith("cid:"):
@@ -188,7 +188,6 @@ class AlexaDevice:
                 audio_file = self.player_instance.tmp_path + "audio.mp3"
                 with open(audio_file, 'wb') as f:
                     f.write(audio_response)
-                print audio_file
                 self.player_instance.blocking_play(audio_file, streamId=audio_id, offset=offset, behavior=behavior)
         elif name == 'Stop':
             self.player_instance.stop()
@@ -248,13 +247,6 @@ class AlexaDevice:
             pass
         else:
             print "Name not recognized (%s)." % name
-
-    def send_event_playback_finished(self, streamId):
-        header = {"namespace": "AudioPlayer",
-            "name": 'PlaybackNearlyFinished',
-        }
-        stream_id = self.alexa.send_event_audio(header, streamId)
-        self.alexa.get_and_process_response(stream_id)
 
     def playback_progress_report_request(self, requestType, playerActivity, streamId):
         reports = []

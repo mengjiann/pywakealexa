@@ -253,26 +253,22 @@ class AlexaConnection:
             connection is reestablished using self.init_connection().
         """
         # Run and wait until ping thread is stopped
-        i = 0
+        success = False
         while not self.thread_stop_event.is_set():
             # Try to send ping request, and get the response
             try:
                 stream_id = self.send_request('GET', '/ping', path_version=False)
                 data = self.get_response(stream_id)
+                if data.status == 204: success = True
             # If anything goes wrong, reset the connection
             except:
-                print("Ping not successful.")
-                # Reinitialize the connection
-                self.close()
-                self.init_connection()
-                break
-            # If ping failed and did not result in correct response
-            if data.status != 204:
+                pass
+
+            if not success:
                 print("Ping not successful.")
                 self.close()
                 self.init_connection()
-                break
-            # Captures the current time before sleeping
+
             start_sleep_time = time.mktime(time.gmtime())
             # Loops every 1 second, to see if correct time has passed (4 minutes) or the stop event is set
             while not self.thread_stop_event.is_set() \
@@ -374,6 +370,7 @@ class AlexaConnection:
             path = '/v20160207' + path
 
         # Send actual request
+        stream_id = None
         self.lock.acquire()
         try:
             if body is not None:
@@ -478,20 +475,19 @@ class AlexaConnection:
         """
         # Get the response
         response = self.get_response(stream_id)
-
-        # If no content response, but things are OK, just return
-        if response.status == 204:
-            return
-
-        # If not OK response status, throw error
-        if response.status != 200:
-            print("Bad status (%s)" % response.status)
-
-        # Take the response, and parse it
         if response is not None:
+    
+            # If no content response, but things are OK, just return
+            if response.status == 204:
+                return
+    
+            # If not OK response status, throw error
+            if response.status != 200:
+                print("Bad status (%s)" % response.status)
+    
+            # Take the response, and parse it
             message = parse_response(response)
-            if message is not None:
-                self.process_response_handle(message)
+            self.process_response_handle(message)
 
     def process_response(self, response):
         """ For a specified stream_id, get AVS's response and process it. The request must have been sent before calling

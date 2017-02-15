@@ -22,35 +22,31 @@ VAD_FRAME_MS = 30
 VAD_PERIOD = (VAD_SAMPLERATE / 1000) * VAD_FRAME_MS
 VAD_SILENCE_TIMEOUT = 1000
 VAD_THROWAWAY_FRAMES = 10
-MAX_RECORDING_LENGTH = 8
-MAX_VOLUME = 100
-MIN_VOLUME = 30
 
 class Speech(object):
     def __init__(self, mic_device="default"):
         self.build_decoder()
         self.mic_device = mic_device
 
+        self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
+        self.inp.setchannels(1)
+        self.inp.setrate(VAD_SAMPLERATE)
+        self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+        self.inp.setperiodsize(VAD_PERIOD)
+        
     def connect(self):
-        inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
-        inp.setchannels(1)
-        inp.setrate(16000)
-        inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-        inp.setperiodsize(1024)
-
         record_audio = False
         while not record_audio:
-            time.sleep(.1)
-
             triggered = False
             while not triggered:
-                _, buf = inp.read()
-                self.decoder.process_raw(buf, False, False)
-                triggered = self.decoder.hyp() is not None
+                _, buf = self.inp.read()
+                if _:
+                    self.decoder.process_raw(buf, False, False)
+                    triggered = self.decoder.hyp() is not None
+                
+                time.sleep(0)
 
             record_audio = True
-    
-        inp.close()
 
         self.decoder.end_utt()
         self.decoder.start_utt()
@@ -70,12 +66,7 @@ class Speech(object):
         self.decoder = pocketsphinx.Decoder(ps_config)
         self.decoder.start_utt()
 
-    def get_audio(self, player_instance, throwaway_frames=0):
-        inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
-        inp.setchannels(1)
-        inp.setrate(VAD_SAMPLERATE)
-        inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-        inp.setperiodsize(VAD_PERIOD)
+    def get_audio(self, player_instance, throwaway_frames=VAD_THROWAWAY_FRAMES):
         audio = ""
         
         thresholdSilenceMet = False
@@ -83,15 +74,12 @@ class Speech(object):
         numSilenceRuns = 0
         silenceRun = 0
         start = time.time()
+
         player_instance.media_player.pause()
-        while frames < throwaway_frames:
-            length, data = inp.read()
-            frames = frames + 1
-            if length:
-                audio += data
-        
-        while ((thresholdSilenceMet is False) and ((time.time() - start) < MAX_RECORDING_LENGTH)):
-            length, data = inp.read()
+
+        print '* listening'
+        while ((thresholdSilenceMet is False) and ((time.time() - start) < throwaway_frames)):
+            length, data = self.inp.read()
             if length:
                 audio += data
     
@@ -108,9 +96,12 @@ class Speech(object):
 
             if (numSilenceRuns != 0) and ((silenceRun * VAD_FRAME_MS) > VAD_SILENCE_TIMEOUT):
                 thresholdSilenceMet = True
-        inp.close()
+
+        print '* getting response'
+
         player_instance.media_player.play()
-        return audio
+        if thresholdSilenceMet:
+            return audio
 
 class Player(object):
     def __init__(self, callback_report, speaker_device=""):
@@ -146,30 +137,22 @@ class Player(object):
         self.player_instance = vlc.Instance('--alsa-audio-device={} --file-logging --logfile=/dev/null'.format(self.speaker_device))
 
     def setup(self, volume=50):
-        self.player = self.player_instance.media_player_new()
         self.media_player = self.player_instance.media_player_new()
         self.set_volume(volume)
-        
-        print('Volume set to {}'.format(volume))
 
     def __play(self, item):
         print 'Audio request: {}'.format(item['url'])
+        player = self.player_instance.media_player_new()
         if (item['audio_type'] == 'media'):
-            player = self.player_instance.media_player_new()
             self.media_player = player
-        else:
-            player = self.player_instance.media_player_new()
-            self.player = player
         
         media = self.player_instance.media_new(item['url'])
-        media.get_mrl()
         player.set_media(media)
         player.audio_set_volume(self.volume)
         if item['audio_type'] == 'media':
             if item['report']: self.required_progress_report.append([item['streamId'],item['report']])
             event_manager = media.event_manager()
             event_manager.event_attach(vlc.EventType.MediaStateChanged, self.state_callback, player, item['streamId'])
-
         player.set_time(item['offset'])
         if (item['audio_type'] == 'speech'):
             self.media_player.pause()
@@ -178,6 +161,9 @@ class Player(object):
         while player.get_state() not in [vlc.State.Ended,vlc.State.Stopped,vlc.State.Error]:
             time.sleep(1)
         player.stop()
+        
+        if item['audio_type'] == 'media':
+            event_manager.event_detach(vlc.EventType.MediaStateChanged)
 
         if (item['audio_type'] == 'speech'):
             self.media_player.play()
@@ -242,12 +228,10 @@ class Player(object):
         self.processing_queue = False
 
     def stop(self):
-        self.player.stop()
         self.media_player.stop()
         self.setup(self.volume)
 
     def pause(self):
-        self.player.pause()
         self.media_player.pause()
 
     def clear(self):
@@ -258,7 +242,6 @@ class Player(object):
     
     def set_volume(self, volume):
         self.volume = volume
-        self.player.audio_set_volume(volume)
         self.media_player.audio_set_volume(volume)
         
     def __interval_progress_report(self, player, streamId, offset):

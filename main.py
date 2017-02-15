@@ -1,7 +1,6 @@
 import helper
 import authorization
 import alexa_device
-import alexa_audio
 import sys
 import signal
 import time
@@ -14,11 +13,11 @@ def cleanup(signal, frame):
     sys.exit(0)
 
 def work(config):
-    volume = 40
+    volume = 60
     
-    speaker_device = 'pulse'
     # defualt if pulseaudio otherwise plughw:[CARDID]
     mic_device = 'default'
+    speaker_device = 'plughw:1'
 
     for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, signal.SIGSEGV, signal.SIGTERM):
         signal.signal(sig, cleanup)
@@ -28,12 +27,14 @@ def work(config):
     player = alexa.set_player_instance(alexa.playback_progress_report_request, speaker_device)
     player.setup(volume)
     player.blocking_play('files/hello.mp3')
-    while True:
+
+    while 1:
         try:
             speech.connect()
             alexa.user_initiate_audio()
         except (KeyboardInterrupt, EOFError, SystemExit):
             break
+        time.sleep(0)
 
 if __name__ == "__main__":
     config = helper.read_dict('config.dict')

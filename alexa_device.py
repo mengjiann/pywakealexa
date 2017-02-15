@@ -3,7 +3,9 @@ import helper
 import time
 import threading
 import traceback
-import tunein
+import urlparse
+import ConfigParser
+import StringIO
 
 import requests
 import json
@@ -13,6 +15,45 @@ import alexa_communication
 __author__ = "NJC"
 __license__ = "MIT"
 __version__ = "0.2"
+
+
+def playlist(pls_fp):
+    """Python generator which returns a playlist item for each call to next.
+    Each item is a tuple containing a url, title and length.
+    Example: ('http://host/song.mp3', 'A Song Title', 210)
+    Arguments:
+    pls_fp -- A file-like object with pls data (only the readLine
+              method is used).
+    Exceptions:
+    NotAPLSFileError if the file isn't recognized as a pls file.
+    Example usage:
+    with open("list.pls") as f:
+        for entry in playlist(f):
+            player.add_url(entry[0])
+    See 'http://en.wikipedia.org/wiki/PLS_(file_format)' for more
+    information about the pls file format.
+    """
+    _SECTION_PLAYLIST = "playlist"
+    buf = StringIO.StringIO(pls_fp)
+    parser = ConfigParser.RawConfigParser()
+
+    try:
+        parser.readfp(buf)
+    except ConfigParser.MissingSectionHeaderError:
+        raise NotAPLSFileError()
+
+    if not parser.has_section(_SECTION_PLAYLIST):
+        raise NotAPLSFileError()
+
+    try:
+        num_entries = parser.getint(_SECTION_PLAYLIST, "NumberOfEntries") + 1
+    except (ConfigParser.NoOptionError, ValueError):
+        raise CorruptPLSFileError()
+
+    index = 1
+    return (parser.get(_SECTION_PLAYLIST, "File%d" % index),
+           parser.get(_SECTION_PLAYLIST, "Title%d" % index),
+           parser.get(_SECTION_PLAYLIST, "Length%d" % index))
 
 
 class AlexaDevice:
@@ -31,7 +72,6 @@ class AlexaDevice:
         self.muted = False
         self.previous_volume = 0
         self.player_instance = None
-        self.tunein_parser = tunein.TuneIn(5000)
         self.player_activity = {"playerActivity": "IDLE", "streamId": ""}
 
         self.device_stop_event = threading.Event()
@@ -99,6 +139,9 @@ class AlexaDevice:
             return [context_audio, context_speaker]
 
     def process_response(self, message):
+        if not message:
+            return
+
         for i, content in enumerate(message['content']):
             content = message['content'][i]
             try:
@@ -119,8 +162,20 @@ class AlexaDevice:
                 self.process_directive_audio_player(content, attachment)
             elif namespace == 'Speaker':
                 self.process_directive_speaker(content, attachment)
+            elif namespace == 'Spotify':
+                self.process_directive_spotify(content, attachment)
             else:
                 print "Namespace not recognized (%s)." % namespace
+
+    def process_directive_spotify(self, content, attachment):
+        header = content['directive']['header']
+        payload = content['directive']['payload']
+
+        name = header['name']
+        if name == 'Discoverable':
+            print 'Spotify is currently unsupported...'
+        else:
+            print "Name not recognized (%s)." % name
 
     def process_directive_speaker(self, content, attachment):
         header = content['directive']['header']
@@ -128,14 +183,22 @@ class AlexaDevice:
 
         name = header['name']
         request_id = False
-        if 'dialogRequestId' in header: request_id = 'dialogRequestId'
+        if 'dialogRequestId' in header:
+            request_id = 'dialogRequestId'
+
         volume = self.player_instance.get_volume()
         if not self.previous_volume or volume > 0:
             self.previous_volume = volume
-        if name in ['SetVolume', 'AdjustVolume']:
+        
+        if 'volume' in payload:
+            set_volume = payload['volume']
+        if name == 'SetVolume':
+            self.player_instance.set_volume(set_volume)
+        elif name == 'AdjustVolume':
             adjust_volume = payload['volume']
-            volume = self.player_instance.get_volume() + adjust_volume
-            self.player_instance.set_volume(volume)
+            volume = self.player_instance.get_volume() + set_volume
+            if volume <= 200:
+                self.player_instance.set_volume(volume)
         elif name in ['Mute', 'SetMute']:
             if payload['mute']:
                 if not self.muted:
@@ -182,7 +245,8 @@ class AlexaDevice:
                     audio_url = "file://" + tmp_path + audio_url.lstrip("cid:") + ".mp3"
                 if audio_url.find('radiotime.com') != -1:
                     audio_url = self.tunein_playlist(audio_url)
-                self.player_instance.queued_play(audio_url, streamId=audio_id, offset=offset, report=report, behavior=behavior)
+                if audio_url:
+                    self.player_instance.queued_play(audio_url, streamId=audio_id, offset=offset, report=report, behavior=behavior)
             else:
                 audio_response = attachment
                 audio_file = self.player_instance.tmp_path + "audio.mp3"
@@ -193,16 +257,6 @@ class AlexaDevice:
             self.player_instance.stop()
         else:
             print "Name not recognized (%s)." % name
-
-    def tunein_playlist(self, url):
-        req = requests.get(url)
-        lines = req.content.split('\n')
-
-        nurl = self.tunein_parser.parse_stream_url(lines[0])
-        if (len(nurl) != 0):
-            return nurl[0]
-
-        return ""
 
     def process_directive_speech_synthesizer(self, content, attachment):
         header = content['directive']['header']
@@ -230,9 +284,10 @@ class AlexaDevice:
 
         name = header['name']
         if name == 'ExpectSpeech':
-            dialog_request_id = header['dialogRequestId']
+            dialog_request_id = None
+            if 'dialogRequestId' in header:
+                dialog_request_id = header['dialogRequestId']
             timeout = payload['timeoutInMilliseconds']/1000
-
             file = "files/beep.wav"
             self.player_instance.blocking_play(file, streamId=dialog_request_id)
             raw_audio = self.speech_instance.get_audio(self.player_instance, throwaway_frames=timeout)
@@ -273,6 +328,19 @@ class AlexaDevice:
                 }
                 stream_id = self.alexa.send_event_audio(header, streamId)
                 self.alexa.get_and_process_response(stream_id)
+
+    def tunein_playlist(self, url):
+        req = requests.get(url)
+        lines = req.content.split('\n')
+        if len(lines):
+            url = lines[0]
+            if urlparse.urlparse(url).path[-4:] == '.pls':
+                l = requests.get(url)
+                p = playlist(l.content)
+                if p:
+                    return p[0]
+            else:
+                return url
 
     def close(self):
         self.device_stop_event.set()

@@ -1,6 +1,7 @@
 .git/*
 .test/*
 *.pyc
+.gitignore
 config.dict
 files/sphinx
 files/sphinx.log

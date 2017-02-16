@@ -88,11 +88,11 @@ class Speech(object):
         numSilenceRuns = 0
         silenceRun = 0
         start = time.time()
-
+        
+        stream = self.get_stream()
         player_instance.media_player.pause()
 
         print '* listening'
-        stream = self.get_stream()
         while ((thresholdSilenceMet is False) and ((time.time() - start) < throwaway_frames)):
             length, data = self.get_data(stream)
             if data:
@@ -114,6 +114,7 @@ class Speech(object):
         print '* getting response'
 
         player_instance.media_player.play()
+        
         if thresholdSilenceMet:
             return audio
 

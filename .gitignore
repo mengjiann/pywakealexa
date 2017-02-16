@@ -3,7 +3,5 @@
 *.pyc
 .gitignore
 config.dict
-files/sphinx
-files/sphinx.log
 example.py
 tunein.log

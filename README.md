@@ -6,7 +6,7 @@ Adjustments made allow you to call upon your device and wake up Alexa, with a wa
 
 ## Features
 
-- Runs on a Raspberry Pi 3 Model B (Have not had the chance to try earlier models, I probably won't.)
+- Runs on a Raspberry Pi 3 Model B and macOS (Have not had the chance to try earlier models, I probably won't.)
 - Customizable wake word (Default is JARVIS)
 - Playback functionality e.g. mute, stop, next, quiet (turn volume down), louder (turn volume up)
 - Runs 24/7 so you can get help when you need it
@@ -14,7 +14,6 @@ Adjustments made allow you to call upon your device and wake up Alexa, with a wa
 
 ## Python Alexa Voice Service (pyWakeAlexa)
 
-<<<<<<< HEAD
 This project is a Python implementation of Amazon's Alexa Voice Service (AVS). The goal of this project is to create cross-platform example Alexa device that is completely compatible with the current AVS API (v20160207). This is a work in progress.
 
 ## Requirements
@@ -23,7 +22,7 @@ This project is a Python implementation of Amazon's Alexa Voice Service (AVS). T
 	- [cherrypy](http://www.cherrypy.org/)
     - [requests](http://docs.python-requests.org/en/master/)
     - [hyper](https://hyper.readthedocs.org/en/latest/) (developer branch)
-	- pyalsaaudio
+	- pyalsaaudio on *nix or pyaudio on macOS
     - webrtcvad
     - pocketsphinx
     - vlc

@@ -4,12 +4,11 @@ import os
 import tempfile
 import threading
 import webrtcvad
-import alsaaudio
 import vlc
 from collections import deque
 from multiprocessing import Queue
 from pocketsphinx import pocketsphinx
-
+from sys import platform
 
 __author__ = "NJC"
 __license__ = "MIT"
@@ -27,25 +26,40 @@ class Speech(object):
     def __init__(self, mic_device="default"):
         self.build_decoder()
         self.mic_device = mic_device
-
-        self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
-        self.inp.setchannels(1)
-        self.inp.setrate(VAD_SAMPLERATE)
-        self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-        self.inp.setperiodsize(VAD_PERIOD)
+    
+    def get_stream(self):
+        if platform == "linux" or platform == "linux2":
+            import alsaaudio
+            stream = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, self.mic_device)
+            stream.setchannels(1)
+            stream.setrate(VAD_SAMPLERATE)
+            stream.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+            stream.setperiodsize(VAD_PERIOD)
+        elif platform == "darwin":
+            import pyaudio
+            audio = pyaudio.PyAudio()
+            stream = audio.open(format=pyaudio.paInt16, channels=1,
+                rate=VAD_SAMPLERATE, input=True,
+                frames_per_buffer=VAD_PERIOD) 
+        return stream 
         
+    def get_data(self, stream):
+        if platform == "linux" or platform == "linux2":
+            return stream.read()
+        elif platform == "darwin":
+            data = stream.read(VAD_PERIOD)
+            return (len(data)/2, data)
+
     def connect(self):
         record_audio = False
+        stream = self.get_stream()
         while not record_audio:
             triggered = False
             while not triggered:
-                _, buf = self.inp.read()
-                if _:
-                    self.decoder.process_raw(buf, False, False)
+                _, data = self.get_data(stream)
+                if data:
+                    self.decoder.process_raw(data, False, False)
                     triggered = self.decoder.hyp() is not None
-                
-                time.sleep(0)
-
             record_audio = True
 
         self.decoder.end_utt()
@@ -78,11 +92,12 @@ class Speech(object):
         player_instance.media_player.pause()
 
         print '* listening'
+        stream = self.get_stream()
         while ((thresholdSilenceMet is False) and ((time.time() - start) < throwaway_frames)):
-            length, data = self.inp.read()
-            if length:
+            length, data = self.get_data(stream)
+            if data:
                 audio += data
-    
+                
                 if length == VAD_PERIOD:
                     isSpeech = vad.is_speech(data, VAD_SAMPLERATE)
     
@@ -96,7 +111,6 @@ class Speech(object):
 
             if (numSilenceRuns != 0) and ((silenceRun * VAD_FRAME_MS) > VAD_SILENCE_TIMEOUT):
                 thresholdSilenceMet = True
-
         print '* getting response'
 
         player_instance.media_player.play()
@@ -134,7 +148,7 @@ class Player(object):
         self.play_lock.set()
 
         self.tmp_path = os.path.join(tempfile.mkdtemp(prefix='pywakealexa-runtime-'), '')
-        self.player_instance = vlc.Instance('--alsa-audio-device={} --file-logging --logfile=/dev/null'.format(self.speaker_device))
+        self.player_instance = vlc.Instance('--file-logging --logfile=/dev/null')
 
     def setup(self, volume=50):
         self.media_player = self.player_instance.media_player_new()

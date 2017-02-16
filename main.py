@@ -9,18 +9,13 @@ __author__ = "NJC"
 __license__ = "MIT"
 __version__ = "0.2"
 
-def cleanup(signal, frame):
-    sys.exit(0)
-
 def work(config):
     volume = 60
+    wake_word = True
     
     # defualt if pulseaudio otherwise plughw:[CARDID]
     mic_device = 'default'
     speaker_device = 'plughw:1'
-
-    for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, signal.SIGSEGV, signal.SIGTERM):
-        signal.signal(sig, cleanup)
 
     alexa = alexa_device.AlexaDevice(config)
     speech = alexa.set_speech_instance(mic_device)
@@ -30,11 +25,19 @@ def work(config):
 
     while 1:
         try:
-            speech.connect()
-            alexa.user_initiate_audio()
+            if not wake_word:
+                text = raw_input("Press enter anytime to start recording (or 'q' to quit).")
+                if text == 'q':
+                    alexa.close()
+                    sys.exit()
+                    break
+            else:
+                speech.connect()
         except (KeyboardInterrupt, EOFError, SystemExit):
+            alexa.close()
+            sys.exit()
             break
-        time.sleep(0)
+        alexa.user_initiate_audio()
 
 if __name__ == "__main__":
     config = helper.read_dict('config.dict')

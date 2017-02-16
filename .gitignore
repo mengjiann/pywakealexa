@@ -4,4 +4,5 @@
 .gitignore
 config.dict
 example.py
+test.py
 tunein.log

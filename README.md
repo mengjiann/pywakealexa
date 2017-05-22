@@ -15,6 +15,19 @@ Instead of using pocketsphinx to detect and process the hotword, Snowboy, a hotw
 
 This project is a Python implementation of Amazon's Alexa Voice Service (AVS). The main goal of this is to use AVS to perform home automation
 
+## Getting start
+
+1. Follow the directions from Amazon on how to get your Client ID, Client Secret, and ProductID (parts of Chapter 3 and Chapter 6).
+2. Rename config_example.dict to config.dict. Then open the file and update the Client ID, Client Secret, and ProductID values to your own values.
+3. Run the main.py script.
+``
+python main.py ./resources/alexa.umdl
+``
+4. You might need to run the following command to kill the hang command.
+``
+pkill -f python
+``
+
 ## Requirements
 
 - [Python 2.7+](https://www.python.org/)

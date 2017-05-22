@@ -7,7 +7,6 @@ import webrtcvad
 import vlc
 from collections import deque
 from multiprocessing import Queue
-from pocketsphinx import pocketsphinx
 from sys import platform
 
 __author__ = "NJC"
@@ -24,7 +23,6 @@ VAD_THROWAWAY_FRAMES = 10
 
 class Speech(object):
     def __init__(self, mic_device="default"):
-        self.build_decoder()
         self.mic_device = mic_device
     
     def get_stream(self):
@@ -49,36 +47,6 @@ class Speech(object):
         elif platform == "darwin":
             data = stream.read(VAD_PERIOD)
             return (len(data)/2, data)
-
-    def connect(self):
-        record_audio = False
-        stream = self.get_stream()
-        while not record_audio:
-            triggered = False
-            while not triggered:
-                _, data = self.get_data(stream)
-                if data:
-                    self.decoder.process_raw(data, False, False)
-                    triggered = self.decoder.hyp() is not None
-            record_audio = True
-
-        self.decoder.end_utt()
-        self.decoder.start_utt()
-
-    def build_decoder(self):
-        model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'files/sphinx')
-        file_name = 'alexa'
-        dict_file = '{}.dict'.format(file_name)
-        lm_file = '{}.lm'.format(file_name)
-        ps_config = pocketsphinx.Decoder.default_config()
-        ps_config.set_string('-hmm', os.path.join(model_path, 'acoustic-model'))
-        ps_config.set_string('-dict', os.path.join(model_path, dict_file))
-        ps_config.set_string('-keyphrase', "JARVIS")
-        ps_config.set_float('-kws_threshold', 1e-10)
-        ps_config.set_string('-logfn', '/dev/null')
-        
-        self.decoder = pocketsphinx.Decoder(ps_config)
-        self.decoder.start_utt()
 
     def get_audio(self, player_instance, throwaway_frames=VAD_THROWAWAY_FRAMES):
         audio = ""

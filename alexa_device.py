@@ -109,6 +109,11 @@ class AlexaDevice:
         raw_audio = self.speech_instance.get_audio(self.player_instance)
         if raw_audio is None:
             return
+        
+        while self.alexa is None:
+            print("Waiting for alexa instance.")
+            time.sleep(0.3)
+            pass
 
         stream_id = self.alexa.start_recognize_event(raw_audio)
         self.alexa.get_and_process_response(stream_id)

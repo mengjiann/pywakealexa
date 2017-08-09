@@ -74,10 +74,6 @@ class AlexaDevice:
         self.player_instance = None
         self.player_activity = {"playerActivity": "IDLE", "streamId": ""}
 
-        self.device_stop_event = threading.Event()
-        self.device_thread = threading.Thread(target=self.device_thread_function)
-        self.device_thread.start()
-
     def set_player_instance(self, playback_progress_report_request, speaker_device):
         self.player_instance = alexa_audio.Player(playback_progress_report_request, speaker_device)
         return self.player_instance
@@ -85,6 +81,11 @@ class AlexaDevice:
     def set_speech_instance(self, mic_device):
         self.speech_instance = alexa_audio.Speech(mic_device)
         return self.speech_instance
+
+    def start_device_thread(self):
+        self.device_stop_event = threading.Event()
+        self.device_thread = threading.Thread(target=self.device_thread_function)
+        self.device_thread.start()
 
     def device_thread_function(self):
         # Start connection and save

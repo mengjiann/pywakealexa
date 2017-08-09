@@ -73,10 +73,6 @@ class HotwordDetector(object):
                  resource=RESOURCE_FILE,
                  sensitivity=[],
                  audio_gain=1):
-        def audio_callback(in_data, frame_count, time_info, status):
-            self.ring_buffer.extend(in_data)
-            play_data = chr(0) * len(in_data)
-            return play_data, pyaudio.paContinue
 
         tm = type(decoder_model)
         ts = type(sensitivity)
@@ -102,6 +98,9 @@ class HotwordDetector(object):
         if len(sensitivity) != 0:
             self.detector.SetSensitivity(sensitivity_str.encode())
 
+        self.ring_buffer = RingBuffer(
+            self.detector.NumChannels() * self.detector.SampleRate() * 5)
+
 
     def start(self, detected_callback=play_audio_file,
               interrupt_check=lambda: False,
@@ -123,18 +122,15 @@ class HotwordDetector(object):
         :return: None
         """
 
+
         def audio_callback(in_data, frame_count, time_info, status):
             self.ring_buffer.extend(in_data)
             play_data = chr(0) * len(in_data)
             return play_data, pyaudio.paContinue
 
-        
         if interrupt_check():
             logger.debug("detect voice return")
             return
-
-        self.ring_buffer = RingBuffer(
-            self.detector.NumChannels() * self.detector.SampleRate() * 5)
 
         self.audio = pyaudio.PyAudio()
 

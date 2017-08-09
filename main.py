@@ -24,12 +24,13 @@ def interrupt_callback():
 
 
 def work(config):
-    volume = 60
+    volume = 45
     
-    # defualt if pulseaudio otherwise plughw:[CARDID]
+    # defualt if pulseaudio otherwise plughw:[CARDID].
     mic_device = 'default'
-    speaker_device = 'plughw:1'
+    speaker_device = 'plughw:2,0'
 
+    # Get trained model.
     if len(sys.argv) == 1:
         print("Error: need to specify model name")
         print("Usage: python demo.py your.model")
@@ -37,27 +38,33 @@ def work(config):
 
     model = sys.argv[1]
 
+    # Register exit signal.
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Init snowboydecoder object.
+    detector = snowboydecoder.HotwordDetector(model, sensitivity=0.5, audio_gain=2)
 
-    print("Listening... Press Ctrl+C to exit")
+    # Init the existing alexa_device.
+    alexa = alexa_device.AlexaDevice(config)
+    speech = alexa.set_speech_instance(mic_device)
+    player = alexa.set_player_instance(alexa.playback_progress_report_request, speaker_device)
+    player.setup(volume)
 
     while True:
         try:
-            # Init the snowboydetector
-            detector = snowboydecoder.HotwordDetector(model, sensitivity=0.5)
+            print("Listening... Press Ctrl+C to exit")
+            # Start detecting
             detector.start(detected_callback=snowboydecoder.play_audio_file,
                interrupt_check=interrupt_callback,
                sleep_time=0.05)
             detector.terminate()
 
-            # Init the existing alexa_device.
-            alexa = alexa_device.AlexaDevice(config)
-            speech = alexa.set_speech_instance(mic_device)
-            player = alexa.set_player_instance(alexa.playback_progress_report_request, speaker_device)
-            player.setup(volume)
+            # Check if previous got interrupted.
+            if interrupted:
+                raise SystemExit
+
+            alexa.start_device_thread()
             alexa.user_initiate_audio()
-            alexa.close()
 
         except (KeyboardInterrupt, EOFError, SystemExit):
             alexa.close()
